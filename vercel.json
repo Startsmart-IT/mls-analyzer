@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/health.js" },
+    { "source": "/api/search-mls", "destination": "/api/search-mls.js" },
+    { "source": "/(.*)", "destination": "/mls_comp_analyzer.html" }
+  ]
+}
