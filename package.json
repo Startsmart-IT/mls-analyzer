@@ -2,13 +2,8 @@
   "type": "module",
   "name": "mls-analyzer",
   "version": "1.0.0",
-  "description": "MLS & Comparable Sales Analyzer",
-  "main": "api/search-mls.js",
+  "description": "MLS Analyzer",
   "dependencies": {
     "axios": "^1.6.0"
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 0c6bad249b62ea751bb4a1ed171994efe9c6367c
