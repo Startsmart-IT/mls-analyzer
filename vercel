@@ -1,4 +1,10 @@
 {
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     { "source": "/api/health", "destination": "/api/health.js" },
     { "source": "/api/search-mls", "destination": "/api/search-mls.js" },
