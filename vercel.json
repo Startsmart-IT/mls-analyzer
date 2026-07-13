@@ -1,19 +1,27 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node"
+  "functions": {
+    "api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 60
     }
-  ],
+  },
   "routes": [
     {
-      "src": "/api/.*",
-      "dest": "/api/$1.js"
+      "src": "/api/search-mls",
+      "dest": "/api/search-mls.js"
     },
     {
-      "src": "/(.*)",
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/(.*\\..*)",
       "dest": "/$1"
+    },
+    {
+      "src": "/",
+      "dest": "/mls_comp_analyzer.html"
     }
   ]
 }
