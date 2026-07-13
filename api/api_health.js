@@ -1,18 +1,20 @@
-/**
- * Health Check Endpoint
- * Vercel automatically runs this at: /api/health
- * 
- * Copy this file to: api/health.js
- * Use this to monitor if your API is online
- * 
- * Test in browser: https://mls-analyzer.vercel.app/api/health
- */
+export default function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export default async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(200).json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        uptime: Math.round(process.uptime() * 1000) / 1000
-    });
-};
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    message: 'MLS Analyzer API is running'
+  });
+}

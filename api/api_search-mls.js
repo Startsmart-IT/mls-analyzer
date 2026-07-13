@@ -1,199 +1,141 @@
-/**
- * MLS Search Serverless Function
- * Vercel automatically runs this at: /api/search-mls
- * 
- * Copy this file to: api/search-mls.js
- * No modifications needed!
- */
+import axios from 'axios';
 
-const axios = require('axios');
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const RAPIDAPI_HOST = 'zillow-com1.p.rapidapi.com';
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-// Simple cache (resets on redeploy)
-const cache = new Map();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+  }
 
-export default async (req, res) => {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  try {
+    const { address, propertyType, radiusMiles, daysBack } = req.body;
 
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+    if (!address) {
+      return res.status(400).json({ 
+        error: 'Address is required',
+        example: '1234 Oak Lane, Cincinnati, OH 45206'
+      });
     }
 
-    // Only accept POST
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    const apiKey = process.env.RAPIDAPI_KEY;
+    if (!apiKey) {
+      console.error('RAPIDAPI_KEY not configured');
+      return res.status(500).json({ 
+        error: 'API key not configured',
+        hint: 'Set RAPIDAPI_KEY in Vercel environment variables'
+      });
     }
 
-    try {
-        const { address, propertyType, radiusMiles, daysBack } = req.body;
+    console.log(`[SEARCH] Address: ${address}, API Key: ${apiKey.substring(0, 8)}...`);
 
-        // Validate input
-        if (!address) {
-            return res.status(400).json({ 
-                error: 'Address is required',
-                example: '1234 Oak Lane, Cincinnati, OH 45206'
-            });
-        }
+    // Call RapidAPI Zillow (using classic API which is more reliable)
+    const zillow_api_response = await axios.get(
+      'https://zillow56.p.rapidapi.com/search',
+      {
+        params: {
+          location: address,
+          outputType: 'json'
+        },
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': 'zillow56.p.rapidapi.com'
+        },
+        timeout: 10000
+      }
+    );
 
-        if (!RAPIDAPI_KEY) {
-            return res.status(500).json({ 
-                error: 'API key not configured',
-                hint: 'Add RAPIDAPI_KEY to Vercel environment variables'
-            });
-        }
+    const properties = zillow_api_response.data || [];
 
-        // Check cache first
-        const cacheKey = `${address.toLowerCase()}_${radiusMiles}`;
-        if (cache.has(cacheKey)) {
-            console.log(`[CACHE HIT] ${address}`);
-            return res.status(200).json(cache.get(cacheKey));
-        }
-
-        console.log(`[API CALL] Fetching data for: ${address}`);
-
-        // Call Zillow API via RapidAPI
-        const options = {
-            method: 'GET',
-            url: 'https://zillow-com1.p.rapidapi.com/propertyExtendedSearch',
-            params: {
-                location: address,
-                resultsPerPage: '50'
-            },
-            headers: {
-                'x-rapidapi-key': RAPIDAPI_KEY,
-                'x-rapidapi-host': RAPIDAPI_HOST
-            },
-            timeout: 10000
-        };
-
-        const response = await axios.request(options);
-        const properties = response.data.property || [];
-
-        if (properties.length === 0) {
-            return res.status(404).json({ 
-                error: `No properties found for: ${address}`,
-                hint: 'Try a different address format',
-                example: '123 Main St, Cincinnati, OH 45202'
-            });
-        }
-
-        // Parse subject property (first result)
-        const subject = properties[0];
-
-        // Get comparable sales (skip subject, take next 5)
-        const comps = properties.slice(1, 6);
-
-        // Get active listings (filter out sold properties)
-        const active = properties
-            .filter(p => !p.lastSoldDate)
-            .slice(0, 3);
-
-        // Calculate market statistics
-        const avgPriceSqft = properties.reduce((sum, p) => {
-            const price = p.price || 0;
-            const sqft = p.livingArea || 1;
-            return sum + (price / sqft);
-        }, 0) / properties.length;
-
-        const avgPrice = properties.reduce((sum, p) => sum + (p.price || 0), 0) / properties.length;
-        const avgDays = properties.reduce((sum, p) => sum + (p.daysOnZillow || 0), 0) / properties.length;
-
-        // Estimate rental income using 0.8% rule (monthly rent = price × 0.008)
-        const estimatedRent = Math.round(subject.price * 0.008);
-        const estimatedCapRate = (estimatedRent * 12) / (subject.price || 1) * 100;
-
-        // Build analysis response
-        const analysisData = {
-            subject: {
-                address: subject.address || 'N/A',
-                beds: subject.bedrooms || 'N/A',
-                baths: subject.bathrooms || 'N/A',
-                sqft: subject.livingArea || 'N/A',
-                lotSize: subject.lotSize ? `${subject.lotSize} sq ft` : 'N/A',
-                yearBuilt: subject.yearBuilt || 'N/A',
-                listPrice: Math.round(subject.price || 0),
-                daysOnMarket: subject.daysOnZillow || 0,
-                listing_url: subject.url || '',
-                mls_id: subject.zpid || ''
-            },
-            market: {
-                avgPricePerSqft: Math.round(avgPriceSqft * 100) / 100,
-                avgSalePrice: Math.round(avgPrice),
-                avgDaysOnMarket: Math.round(avgDays),
-                priceChangeYoY: '+2.1%'
-            },
-            comparable_sales: comps.map(p => ({
-                address: p.address || 'N/A',
-                beds: p.bedrooms || 'N/A',
-                baths: p.bathrooms || 'N/A',
-                sqft: p.livingArea || 0,
-                salePrice: Math.round(p.price || 0),
-                pricePerSqft: p.livingArea 
-                    ? Math.round((p.price / p.livingArea) * 100) / 100 
-                    : 0,
-                saleDate: p.lastSoldDate || 'N/A',
-                daysOnMarket: p.daysOnZillow || 0
-            })),
-            active_listings: active.map(p => ({
-                address: p.address || 'N/A',
-                beds: p.bedrooms || 'N/A',
-                baths: p.bathrooms || 'N/A',
-                sqft: p.livingArea || 0,
-                listPrice: Math.round(p.price || 0),
-                pricePerSqft: p.livingArea 
-                    ? Math.round((p.price / p.livingArea) * 100) / 100 
-                    : 0,
-                daysOnMarket: p.daysOnZillow || 0
-            })),
-            rental_market: {
-                avgMonthlyRent: estimatedRent,
-                rentPerSqft: Math.round((estimatedRent * 12) / (subject.livingArea || 1500) * 100) / 100,
-                rentPriceTrend: 'up',
-                averageCapRate: Math.round(estimatedCapRate * 100) / 100
-            },
-            metadata: {
-                searchRadius: `${radiusMiles} miles`,
-                dataAge: new Date().toISOString(),
-                sources: 'Zillow API via RapidAPI',
-                daysBack: parseInt(daysBack)
-            }
-        };
-
-        // Cache for this deployment (prevents duplicate API calls)
-        cache.set(cacheKey, analysisData);
-
-        res.status(200).json(analysisData);
-
-    } catch (error) {
-        console.error('[ERROR]', error.message);
-
-        // Helpful error messages
-        let errorMsg = error.message;
-        let hint = '';
-
-        if (error.message.includes('401')) {
-            errorMsg = 'API Key invalid or missing';
-            hint = 'Check RAPIDAPI_KEY in Vercel environment variables';
-        } else if (error.message.includes('429')) {
-            errorMsg = 'Rate limit exceeded';
-            hint = 'You\'ve exceeded your RapidAPI quota. Wait 1 min or upgrade plan.';
-        } else if (error.message.includes('timeout')) {
-            errorMsg = 'API timeout';
-            hint = 'Zillow is slow right now, try again in a moment';
-        } else if (error.message.includes('ENOTFOUND')) {
-            errorMsg = 'Network error';
-            hint = 'Cannot reach Zillow API, Vercel environment might be misconfigured';
-        }
-
-        res.status(500).json({
-            error: errorMsg,
-            hint: hint
-        });
+    if (!properties || properties.length === 0) {
+      return res.status(404).json({ 
+        error: `No properties found for: ${address}`,
+        hint: 'Try a different address or city'
+      });
     }
-};
+
+    // Get subject property (first result)
+    const subject = properties[0];
+    const comps = properties.slice(1, 6);
+
+    // Calculate market stats
+    const avgPrice = properties.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0) / properties.length;
+    const avgSqft = properties.reduce((sum, p) => sum + (parseFloat(p.sqft) || parseFloat(p.livingArea) || 0), 0) / properties.length;
+    const avgPriceSqft = avgSqft > 0 ? avgPrice / avgSqft : 0;
+
+    // Estimate rental using 0.8% rule
+    const subjectPrice = parseFloat(subject.price) || 500000;
+    const estimatedMonthlyRent = Math.round(subjectPrice * 0.008);
+    const estimatedCapRate = (estimatedMonthlyRent * 12) / subjectPrice * 100;
+
+    // Build response
+    const response = {
+      subject: {
+        address: subject.address || subject.addressString || 'N/A',
+        beds: subject.beds || subject.bedrooms || 'N/A',
+        baths: subject.baths || subject.bathrooms || 'N/A',
+        sqft: subject.sqft || subject.livingArea || 'N/A',
+        listPrice: Math.round(subjectPrice),
+        url: subject.url || ''
+      },
+      market: {
+        avgPrice: Math.round(avgPrice),
+        avgPriceSqft: Math.round(avgPriceSqft * 100) / 100,
+        totalProperties: properties.length
+      },
+      comparable_sales: comps.map(p => ({
+        address: p.address || p.addressString || 'N/A',
+        beds: p.beds || p.bedrooms || 'N/A',
+        baths: p.baths || p.bathrooms || 'N/A',
+        sqft: p.sqft || p.livingArea || 0,
+        price: Math.round(parseFloat(p.price) || 0),
+        pricePerSqft: (p.sqft || p.livingArea) 
+          ? Math.round((parseFloat(p.price) / (p.sqft || p.livingArea)) * 100) / 100 
+          : 0
+      })),
+      rental_market: {
+        estimatedMonthlyRent: estimatedMonthlyRent,
+        estimatedAnnualRent: estimatedMonthlyRent * 12,
+        estimatedCapRate: Math.round(estimatedCapRate * 100) / 100
+      },
+      metadata: {
+        searchAddress: address,
+        timestamp: new Date().toISOString(),
+        propertiesReturned: properties.length
+      }
+    };
+
+    return res.status(200).json(response);
+
+  } catch (error) {
+    console.error('[ERROR]', error.message);
+
+    let errorMsg = error.message;
+    let statusCode = 500;
+
+    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      errorMsg = 'API Key invalid or expired';
+      statusCode = 401;
+    } else if (error.message.includes('429') || error.message.includes('quota')) {
+      errorMsg = 'Rate limit or quota exceeded on RapidAPI';
+      statusCode = 429;
+    } else if (error.message.includes('timeout')) {
+      errorMsg = 'API request timeout';
+      statusCode = 504;
+    } else if (error.response?.status === 404) {
+      errorMsg = 'Endpoint not found - check RapidAPI subscription';
+      statusCode = 404;
+    }
+
+    return res.status(statusCode).json({
+      error: errorMsg,
+      debug: error.message
+    });
+  }
+}

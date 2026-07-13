@@ -1,18 +1,24 @@
 {
   "version": 2,
+  "env": {
+    "RAPIDAPI_KEY": "@rapidapi_key"
+  },
   "functions": {
-    "api/*.js": {
+    "api/**.js": {
+      "memory": 1024,
       "maxDuration": 60
     }
   },
   "routes": [
     {
       "src": "/api/health",
-      "dest": "/api/health.js"
+      "dest": "/api/health.js",
+      "methods": ["GET"]
     },
     {
       "src": "/api/search-mls",
-      "dest": "/api/search-mls.js"
+      "dest": "/api/search-mls.js",
+      "methods": ["POST"]
     },
     {
       "src": "/(.*\\..*)",
