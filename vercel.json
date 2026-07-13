@@ -1,13 +1,13 @@
 {
   "version": 2,
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "src": "/api/(.*)",
+      "dest": "/api/$1.js"
     },
     {
-      "source": "/:path*",
-      "destination": "/mls_comp_analyzer.html"
+      "src": "/(.*)",
+      "dest": "/mls_comp_analyzer.html"
     }
   ]
 }
