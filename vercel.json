@@ -1,9 +1,26 @@
 {
-  "type": "module",
-  "name": "mls-analyzer",
-  "version": "1.0.0",
-  "description": "MLS Analyzer",
-  "dependencies": {
-    "axios": "^1.6.0"
-  }
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/search-mls",
+      "dest": "/api/search-mls.js"
+    },
+    {
+      "src": "/(.*\\..*)",
+      "dest": "/$1"
+    },
+    {
+      "src": "/.*",
+      "dest": "/mls_comp_analyzer.html"
+    }
+  ]
 }
