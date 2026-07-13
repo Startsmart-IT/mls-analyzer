@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "name": "mls-analyzer",
+  "version": "1.0.0",
+  "description": "MLS Analyzer",
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
